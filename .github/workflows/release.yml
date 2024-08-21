@@ -89,6 +89,11 @@ jobs:
         run: |
           echo "ARTIFACT_NAME=$BIN-${TAG_NAME#v}-${{ matrix.label }}.zip" >> "$GITHUB_ENV"
 
+      - name: Run Unit Tests
+        run: cargo test --verbose --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_DIR: output
+
       - name: Create Archive
         shell: bash
         run: |
