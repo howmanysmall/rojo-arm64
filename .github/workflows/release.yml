@@ -16,53 +16,31 @@ jobs:
         run: |
           gh release create ${{ github.ref_name }} --draft --verify-tag --title ${{ github.ref_name }}
 
-  build-plugin:
-    needs: ["create-release"]
-    name: Build Roblox Studio Plugin
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-
-      - name: Setup Aftman
-        uses: ok-nick/setup-aftman@v0.1.0
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          trust-check: false
-          version: 'v0.2.6'
-
-      - name: Build Plugin
-        run: rojo build plugin --output Rojo.rbxm
-
-      - name: Upload Plugin to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload ${{ github.ref_name }} Rojo.rbxm
-
-      - name: Upload Plugin to Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: Rojo.rbxm
-          path: Rojo.rbxm
-
   build:
     needs: ["create-release"]
     strategy:
       fail-fast: false
       matrix:
-        # https://doc.rust-lang.org/rustc/platform-support.html
         include:
           - host: linux
             os: ubuntu-20.04
             target: x86_64-unknown-linux-gnu
             label: linux-x86_64
 
+          - host: linux
+            os: ubuntu-20.04
+            target: aarch64-unknown-linux-gnu
+            label: linux-arm64
+
           - host: windows
             os: windows-latest
             target: x86_64-pc-windows-msvc
             label: windows-x86_64
+
+          - host: windows
+            os: windows-latest
+            target: aarch64-pc-windows-msvc
+            label: windows-arm64
 
           - host: macos
             os: macos-latest
@@ -83,6 +61,10 @@ jobs:
         with:
           submodules: true
 
+      - name: Install ARM64 Toolchain (Linux)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -98,8 +80,6 @@ jobs:
       - name: Build Release
         run: cargo build --release --locked --verbose --target ${{ matrix.target }}
         env:
-          # Build into a known directory so we can find our build artifact more
-          # easily.
           CARGO_TARGET_DIR: output
 
       - name: Generate Artifact Name
@@ -109,10 +89,13 @@ jobs:
         run: |
           echo "ARTIFACT_NAME=$BIN-${TAG_NAME#v}-${{ matrix.label }}.zip" >> "$GITHUB_ENV"
 
-      - name: Create Archive and Upload to Release
-        shell: bash
+      - name: Run Unit Tests
+        run: cargo test --verbose --target ${{ matrix.target }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_TARGET_DIR: output
+
+      - name: Create Archive
+        shell: bash
         run: |
           mkdir staging
 
@@ -126,10 +109,16 @@ jobs:
             zip ../$ARTIFACT_NAME *
           fi
 
-          gh release upload ${{ github.ref_name }} ../$ARTIFACT_NAME
-
       - name: Upload Archive to Artifacts
         uses: actions/upload-artifact@v4
         with:
           path: ${{ env.ARTIFACT_NAME }}
           name: ${{ env.ARTIFACT_NAME }}
+
+      - name: Upload Archive to Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ github.ref_name }} ${{ env.ARTIFACT_NAME }} --clobber --repo ${{ github.repository }}
+
+# pleaes work
