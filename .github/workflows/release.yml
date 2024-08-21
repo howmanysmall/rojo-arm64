@@ -120,3 +120,5 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           gh release upload ${{ github.ref_name }} ${{ env.ARTIFACT_NAME }} --clobber --repo ${{ github.repository }}
+
+# pleaes work
